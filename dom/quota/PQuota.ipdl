@@ -19,6 +19,12 @@ using mozilla::dom::quota::PersistenceType
 using mozilla::dom::quota::Client::Type
   from "mozilla/dom/quota/Client.h";
 
+[MoveOnly] using mozilla::dom::quota::OriginUsageMetadataArray
+  from "mozilla/dom/quota/CommonMetadataArray.h";
+
+using mozilla::dom::quota::UsageInfo
+  from "mozilla/dom/quota/UsageInfo.h";
+
 using mozilla::dom::ContentParentId
   from "mozilla/dom/ipc/IdType.h";
 
@@ -37,6 +43,18 @@ union BoolResponse
 namespace dom {
 namespace quota {
 
+union OriginUsageMetadataArrayResponse
+{
+  nsresult;
+  OriginUsageMetadataArray;
+};
+
+union UsageInfoResponse
+{
+  nsresult;
+  UsageInfo;
+};
+
 struct StorageNameParams
 {
 };
@@ -45,23 +63,6 @@ struct GetFullOriginMetadataParams
 {
   PersistenceType persistenceType;
   PrincipalInfo principalInfo;
-};
-
-struct AllUsageParams
-{
-  bool getAll;
-};
-
-struct OriginUsageParams
-{
-  PrincipalInfo principalInfo;
-  bool fromMemory;
-};
-
-union UsageRequestParams
-{
-  AllUsageParams;
-  OriginUsageParams;
 };
 
 struct ClearResetOriginParams
@@ -119,8 +120,6 @@ protocol PQuota
 parent:
   async __delete__();
 
-  async PQuotaUsageRequest(UsageRequestParams params);
-
   async PQuotaRequest(RequestParams params);
 
   async StorageInitialized()
@@ -150,6 +149,15 @@ parent:
 
   async InitializeTemporaryStorage()
       returns(BoolResponse response);
+
+  async GetUsage(bool getAll,
+                 ManagedEndpoint<PQuotaUsageRequestParent> parentEndpoint)
+      returns(OriginUsageMetadataArrayResponse response);
+
+  async GetOriginUsage(PrincipalInfo principalInfo,
+                       bool fromMemory,
+                       ManagedEndpoint<PQuotaUsageRequestParent> parentEndpoint)
+      returns(UsageInfoResponse response);
 
   async ClearStoragesForOrigin(PersistenceType? persistenceType,
                                PrincipalInfo principalInfo,

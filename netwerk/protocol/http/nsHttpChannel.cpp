@@ -56,6 +56,7 @@
 #include "nsQueryObject.h"
 #include "nsThreadUtils.h"
 #include "nsIConsoleService.h"
+#include "nsINetworkErrorLogging.h"
 #include "mozilla/AntiTrackingRedirectHeuristic.h"
 #include "mozilla/AntiTrackingUtils.h"
 #include "mozilla/Attributes.h"
@@ -1634,7 +1635,8 @@ nsresult nsHttpChannel::InitTransaction() {
     if (NS_WARN_IF(!gIOService->SocketProcessReady())) {
       return NS_ERROR_NOT_AVAILABLE;
     }
-    SocketProcessParent* socketProcess = SocketProcessParent::GetSingleton();
+    RefPtr<SocketProcessParent> socketProcess =
+        SocketProcessParent::GetSingleton();
     if (!socketProcess->CanSend()) {
       return NS_ERROR_NOT_AVAILABLE;
     }
@@ -1813,6 +1815,19 @@ nsresult nsHttpChannel::CallOnStartRequest() {
                      "calling CallOnStartRequest");
 
   mEarlyHintObserver = nullptr;
+
+  if (StaticPrefs::network_http_network_error_logging_enabled() &&
+      mResponseHead && mResponseHead->HasHeader(nsHttp::NEL) &&
+      LoadUsedNetwork()) {
+    // If the policy gets cleared, but this response is still in the cache,
+    // we probably don't want to reinstall the policy when the entry is
+    // reloaded. That means it's important to only call RegisterPolicy when
+    // LoadUsedNetwork() is true.
+    if (nsCOMPtr<nsINetworkErrorLogging> nel =
+            components::NetworkErrorLogging::Service()) {
+      nel->RegisterPolicy(this);
+    }
+  }
 
   if (LoadOnStartRequestCalled()) {
     // This can only happen when a range request loading rest of the data
@@ -3933,6 +3948,15 @@ nsresult nsHttpChannel::ProcessNotModified(
   mCachedResponseHead->Flatten(head, true);
   rv = mCacheEntry->SetMetaDataElement("response-head", head.get());
   if (NS_FAILED(rv)) return rv;
+
+  if (StaticPrefs::network_http_network_error_logging_enabled() &&
+      LoadUsedNetwork() && !mReportedNEL) {
+    if (nsCOMPtr<nsINetworkErrorLogging> nel =
+            components::NetworkErrorLogging::Service()) {
+      nel->GenerateNELReport(this);
+    }
+    mReportedNEL = true;
+  }
 
   // make the cached response be the current response
   mResponseHead = std::move(mCachedResponseHead);
@@ -6197,16 +6221,25 @@ nsresult nsHttpChannel::CancelInternal(nsresult status) {
     StoreChannelClassifierCancellationPending(0);
   }
 
+  mEarlyHintObserver = nullptr;
+  mWebTransportSessionEventListener = nullptr;
+  mCanceled = true;
+  mStatus = NS_FAILED(status) ? status : NS_ERROR_ABORT;
+
+  if (StaticPrefs::network_http_network_error_logging_enabled() &&
+      LoadUsedNetwork() && !mReportedNEL) {
+    if (nsCOMPtr<nsINetworkErrorLogging> nel =
+            components::NetworkErrorLogging::Service()) {
+      nel->GenerateNELReport(this);
+    }
+    mReportedNEL = true;
+  }
+
   // We don't want the content process to see any header values
   // when the request is blocked by ORB
   if (mChannelBlockedByOpaqueResponse && mCachedOpaqueResponseBlockingPref) {
     mResponseHead->ClearHeaders();
   }
-
-  mEarlyHintObserver = nullptr;
-  mWebTransportSessionEventListener = nullptr;
-  mCanceled = true;
-  mStatus = NS_FAILED(status) ? status : NS_ERROR_ABORT;
 
   if (mLastStatusReported && !mEndMarkerAdded &&
       profiler_thread_is_being_profiled_for_markers()) {
@@ -8066,20 +8099,42 @@ static void RecordHTTPSUpgradeTelemetry(nsIURI* aURI, nsILoadInfo* aLoadInfo) {
     return;
   }
 
+  bool isHTTPS = aURI->SchemeIs("https");
+
   nsILoadInfo::HTTPSUpgradeTelemetryType httpsTelemetry =
-      nsILoadInfo::NOT_INITIALIZED;
-  aLoadInfo->GetHttpsUpgradeTelemetry(&httpsTelemetry);
+      aLoadInfo->GetHttpsUpgradeTelemetry();
   switch (httpsTelemetry) {
-    case nsILoadInfo::NOT_INITIALIZED:
+    case nsILoadInfo::NOT_INITIALIZED: {
+      if (isHTTPS) {
+        // Bug 1912222: We should never encounter NOT_INITIALIZED values,
+        // though we still want to know whether those loads are HTTPS
+        // or not. Eventually we'll want to remove this if-clause
+        // again and only report "not_initialized".
+        mozilla::glean::networking::http_to_https_upgrade_reason
+            .Get("not_initialized_https"_ns)
+            .Add(1);
+        return;
+      }
       mozilla::glean::networking::http_to_https_upgrade_reason
           .Get("not_initialized"_ns)
           .Add(1);
       break;
-    case nsILoadInfo::NO_UPGRADE:
+    }
+    case nsILoadInfo::NO_UPGRADE: {
+      if (isHTTPS) {
+        // Bug 1912222: We should rearely encounter NO_UPGRADE values, though
+        // we still want to ensure those are not HTTPS. Eventually we'll want
+        // to remove this if-clause again and only report "no_upgrade".
+        mozilla::glean::networking::http_to_https_upgrade_reason
+            .Get("no_upgrade_https"_ns)
+            .Add(1);
+        return;
+      }
       mozilla::glean::networking::http_to_https_upgrade_reason
           .Get("no_upgrade"_ns)
           .Add(1);
       break;
+    }
     case nsILoadInfo::ALREADY_HTTPS:
       mozilla::glean::networking::http_to_https_upgrade_reason
           .Get("already_https"_ns)
@@ -8702,6 +8757,15 @@ nsresult nsHttpChannel::ContinueOnStopRequest(nsresult aStatus, bool aIsFromNet,
     mAuthRetryPending = false;
   }
 
+  if (StaticPrefs::network_http_network_error_logging_enabled() &&
+      LoadUsedNetwork() && !mReportedNEL) {
+    if (nsCOMPtr<nsINetworkErrorLogging> nel =
+            components::NetworkErrorLogging::Service()) {
+      nel->GenerateNELReport(this);
+    }
+    mReportedNEL = true;
+  }
+
   // notify "http-on-before-stop-request" observers
   gHttpHandler->OnBeforeStopRequest(this);
 
@@ -9013,6 +9077,7 @@ nsHttpChannel::OnTransportStatus(nsITransport* trans, nsresult status,
   // cache the progress sink so we don't have to query for it each time.
   if (!mProgressSink) GetCallback(mProgressSink);
 
+  mLastTransportStatus = status;
   if (status == NS_NET_STATUS_CONNECTED_TO ||
       status == NS_NET_STATUS_WAITING_FOR) {
     bool isTrr = false;
@@ -10933,6 +10998,12 @@ nsHttpChannel::GetWebTransportSessionEventListener() {
   RefPtr<WebTransportSessionEventListener> wt =
       mWebTransportSessionEventListener;
   return wt.forget();
+}
+
+NS_IMETHODIMP nsHttpChannel::GetLastTransportStatus(
+    nsresult* aLastTransportStatus) {
+  *aLastTransportStatus = mLastTransportStatus;
+  return NS_OK;
 }
 
 }  // namespace net

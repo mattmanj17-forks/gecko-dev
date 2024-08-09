@@ -55,7 +55,6 @@
 using namespace js;
 using namespace js::jit;
 
-using mozilla::BitwiseCast;
 using mozilla::Maybe;
 
 using JS::ExpandoAndGeneration;
@@ -9969,6 +9968,36 @@ bool CacheIRCompiler::emitAtomicsIsLockFreeResult(Int32OperandId valueId) {
   return true;
 }
 
+bool CacheIRCompiler::emitInt32ToBigIntResult(Int32OperandId inputId) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  AutoOutputRegister output(*this);
+  Register input = allocator.useRegister(masm, inputId);
+  AutoScratchRegisterMaybeOutput scratch1(allocator, masm, output);
+  AutoScratchRegister scratch2(allocator, masm);
+
+  FailurePath* failure;
+  if (!addFailurePath(&failure)) {
+    return false;
+  }
+
+  LiveRegisterSet save = liveVolatileRegs();
+  save.takeUnchecked(scratch1);
+  save.takeUnchecked(scratch2);
+  save.takeUnchecked(output);
+
+  // Allocate a new BigInt. The code after this must be infallible.
+  gc::Heap initialHeap = InitialBigIntHeap(cx_);
+  EmitAllocateBigInt(masm, scratch1, scratch2, save, initialHeap,
+                     failure->label());
+
+  masm.move32SignExtendToPtr(input, scratch2);
+  masm.initializeBigInt(scratch1, scratch2);
+
+  masm.tagValue(JSVAL_TYPE_BIGINT, scratch1, output.valueReg());
+  return true;
+}
+
 bool CacheIRCompiler::emitBigIntAsIntNResult(Int32OperandId bitsId,
                                              BigIntOperandId bigIntId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
@@ -10449,6 +10478,18 @@ bool CacheIRCompiler::emitBailout() {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 
   // Generates no code.
+
+  return true;
+}
+
+bool CacheIRCompiler::emitAssertFloat32Result(ValOperandId valId,
+                                              bool mustFloat32) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  AutoOutputRegister output(*this);
+
+  // NOP when not in IonMonkey
+  masm.moveValue(UndefinedValue(), output.valueReg());
 
   return true;
 }

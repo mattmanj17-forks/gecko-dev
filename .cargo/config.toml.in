@@ -25,9 +25,9 @@ git = "https://github.com/franziskuskiefer/cose-rust"
 rev = "43c22248d136c8b38fe42ea709d08da6355cf04b"
 replace-with = "vendored-sources"
 
-[source."git+https://github.com/gfx-rs/wgpu?rev=aeb2067e8120c1ff480625c00b9571db8d01d5a4"]
+[source."git+https://github.com/gfx-rs/wgpu?rev=9c6ae1beae2490ce44d99034f7f1faada936f3d8"]
 git = "https://github.com/gfx-rs/wgpu"
-rev = "aeb2067e8120c1ff480625c00b9571db8d01d5a4"
+rev = "9c6ae1beae2490ce44d99034f7f1faada936f3d8"
 replace-with = "vendored-sources"
 
 [source."git+https://github.com/hsivonen/any_all_workaround?rev=7fb1b7034c9f172aade21ee1c8554e8d8a48af80"]
@@ -85,9 +85,9 @@ git = "https://github.com/mozilla/mp4parse-rust"
 rev = "a138e40ec1c603615873e524b5b22e11c0ec4820"
 replace-with = "vendored-sources"
 
-[source."git+https://github.com/mozilla/neqo?tag=v0.8.1"]
+[source."git+https://github.com/mozilla/neqo?tag=v0.8.2"]
 git = "https://github.com/mozilla/neqo"
-tag = "v0.8.1"
+tag = "v0.8.2"
 replace-with = "vendored-sources"
 
 [source."git+https://github.com/servo/unicode-bidi?rev=ca612daf1c08c53abe07327cb3e6ef6e0a760f0c"]

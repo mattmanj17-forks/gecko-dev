@@ -2680,6 +2680,19 @@
   value: false
   mirror: always
 
+
+# The maximum number of pending fetch keepalive requests per browser instance
+- name: dom.fetchKeepalive.total_request_limit
+  type: RelaxedAtomicUint32
+  value: 30
+  mirror: always
+
+# The maximum number of pending fetch keepalive requests per origin
+- name: dom.fetchKeepalive.request_limit_per_origin
+  type: RelaxedAtomicUint32
+  value: 10
+  mirror: always
+
 - name: dom.fetchObserver.enabled
   type: RelaxedAtomicBool
   value: false
@@ -3156,7 +3169,11 @@
 # WebCodecs API
 - name: dom.media.webcodecs.enabled
   type: RelaxedAtomicBool
+#if defined(MOZ_WIDGET_ANDROID)
   value: @IS_NIGHTLY_BUILD@
+#else
+  value: true
+#endif
   mirror: always
 
 # WebCodecs API - Image decoder
@@ -3471,6 +3488,12 @@
 - name: dom.quotaManager.temporaryStorage.fixedLimit
   type: RelaxedAtomicInt32
   value: -1
+  mirror: always
+
+# A pref that is used to slow down origin operations for testing purposes.
+- name: dom.quotaManager.originOperations.pauseOnIOThreadMs
+  type: RelaxedAtomicUint32
+  value: 0
   mirror: always
 
 # A pref that is used to enable testing features.
@@ -4076,6 +4099,11 @@
 - name: dom.workers.modules.enabled
   type: RelaxedAtomicBool
   value: true
+  mirror: always
+
+- name: dom.workers.throttling.enabled
+  type: RelaxedAtomicBool
+  value: false
   mirror: always
 
 - name: dom.workers.serialized-sab-access
@@ -8013,6 +8041,13 @@
     type: bool
     value: false
     mirror: always
+
+  # Experimental support for RegExp.escape in JavaScript.
+-   name: javascript.options.experimental.regexp_escape
+    type: bool
+    value: false
+    mirror: always
+    set_spidermonkey_pref: startup
 #endif  // NIGHTLY_BUILD
 
 #ifdef ENABLE_JSON_PARSE_WITH_SOURCE
@@ -10808,7 +10843,7 @@
 
 -   name: media.wmf.allow-unsupported-resolutions
     type: RelaxedAtomicBool
-    value: false
+    value: true
     mirror: always
 
 -   name: media.wmf.vp9.enabled
@@ -12043,7 +12078,7 @@
 # This pref will only be consulted if CHIPS itself is enabled
 - name: network.cookie.chips.partitionLimitEnabled
   type: bool
-  value: @IS_EARLY_BETA_OR_EARLIER@
+  value: true
   mirror: always
 
 # CHIPS partition limit DryRun mode disables purging/rejection
@@ -12080,7 +12115,7 @@
 
 - name: network.cookie.sameSite.noneRequiresSecure
   type: bool
-  value: @IS_NIGHTLY_BUILD@
+  value: true
   mirror: always
 
 - name: network.cookie.sameSite.schemeful
@@ -12313,6 +12348,12 @@
 - name: network.http.sanitize-headers-in-logs
   type: RelaxedAtomicBool
   value: true
+  mirror: always
+
+# Whether network error logging is enabled.
+- name: network.http.network_error_logging.enabled
+  type: RelaxedAtomicBool
+  value: false
   mirror: always
 
 # Hard code the User-Agent string's CPU architecture. This pref can be removed
@@ -13563,11 +13604,6 @@
 # by quinn-udp, are disallowed by seccomp. Future fix and further details
 # tracked in https://github.com/quinn-rs/quinn/issues/1947.
 #if defined(ANDROID) && !defined(HAVE_64BIT_BUILD)
-  value: true
-# Always use NSPR on Windows. Windows is failing with a zero-size read. Future
-# fix and further details tracked in
-# https://bugzilla.mozilla.org/show_bug.cgi?id=1911658.
-#elif defined(XP_WIN)
   value: true
 #else
   value: @IS_NOT_NIGHTLY_BUILD@

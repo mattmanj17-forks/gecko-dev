@@ -4856,6 +4856,16 @@ bool WarpCacheIRTranspiler::emitAtomicsIsLockFreeResult(
   return true;
 }
 
+bool WarpCacheIRTranspiler::emitInt32ToBigIntResult(Int32OperandId inputId) {
+  MDefinition* input = getOperand(inputId);
+
+  auto* ins = MInt32ToBigInt::New(alloc(), input);
+  add(ins);
+
+  pushResult(ins);
+  return true;
+}
+
 bool WarpCacheIRTranspiler::emitBigIntAsIntNResult(Int32OperandId bitsId,
                                                    BigIntOperandId bigIntId) {
   MDefinition* bits = getOperand(bitsId);
@@ -6310,6 +6320,17 @@ bool WarpCacheIRTranspiler::emitAssertPropertyLookup(ObjOperandId objId,
                                                      uint32_t slotOffset) {
   // We currently only emit checks in baseline.
   return true;
+}
+
+bool WarpCacheIRTranspiler::emitAssertFloat32Result(ValOperandId valId,
+                                                    bool mustBeFloat32) {
+  MDefinition* val = getOperand(valId);
+
+  auto* assert = MAssertFloat32::New(alloc(), val, mustBeFloat32);
+  addEffectful(assert);
+
+  pushResult(constant(UndefinedValue()));
+  return resumeAfter(assert);
 }
 
 bool WarpCacheIRTranspiler::emitAssertRecoveredOnBailoutResult(

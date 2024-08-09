@@ -9,12 +9,12 @@
 #include "mozilla/ReverseIterator.h"  // mozilla::Reversed(...)
 #include "mozilla/ScopeExit.h"
 #include "mozilla/Span.h"  // mozilla::Span<TaggedScriptThingIndex>
-#include "mozilla/Utf8.h"  // mozilla::Utf8Unit
 
 #include <algorithm>
 
 #include "frontend/CompilationStencil.h"  // frontend::CompilationStencil
 #include "gc/GC.h"
+#include "gc/Zone.h"
 #include "jit/Ion.h"
 #include "jit/IonCompileTask.h"
 #include "jit/JitRuntime.h"
@@ -36,8 +36,6 @@
 using namespace js;
 
 using mozilla::TimeDuration;
-using mozilla::TimeStamp;
-using mozilla::Utf8Unit;
 
 namespace js {
 

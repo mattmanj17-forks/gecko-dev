@@ -26,6 +26,10 @@ void MacroAssembler::moveGPRToFloat32(Register src, FloatRegister dest) {
   moveToFloat32(src, dest);
 }
 
+void MacroAssembler::moveLowDoubleToGPR(FloatRegister src, Register dest) {
+  MOZ_CRASH("Not supported for this target");
+}
+
 void MacroAssembler::move8ZeroExtend(Register src, Register dest) {
   as_andi(dest, src, 0xff);
 }
@@ -1287,25 +1291,20 @@ void MacroAssembler::spectreZeroRegister(Condition cond, Register scratch,
 
 FaultingCodeOffset MacroAssembler::storeUncanonicalizedDouble(
     FloatRegister src, const Address& addr) {
-  // FIXME -- see https://bugzilla.mozilla.org/show_bug.cgi?id=1855960
-  return FaultingCodeOffset();
-  ma_sd(src, addr);
+  return ma_sd(src, addr);
 }
 FaultingCodeOffset MacroAssembler::storeUncanonicalizedDouble(
     FloatRegister src, const BaseIndex& addr) {
-  return FaultingCodeOffset();  // FIXME
-  ma_sd(src, addr);
+  return ma_sd(src, addr);
 }
 
 FaultingCodeOffset MacroAssembler::storeUncanonicalizedFloat32(
     FloatRegister src, const Address& addr) {
-  return FaultingCodeOffset();  // FIXME
-  ma_ss(src, addr);
+  return ma_ss(src, addr);
 }
 FaultingCodeOffset MacroAssembler::storeUncanonicalizedFloat32(
     FloatRegister src, const BaseIndex& addr) {
-  return FaultingCodeOffset();  // FIXME
-  ma_ss(src, addr);
+  return ma_ss(src, addr);
 }
 
 FaultingCodeOffset MacroAssembler::storeUncanonicalizedFloat16(

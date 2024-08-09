@@ -6,7 +6,6 @@
 
 #include "jit/MIR.h"
 
-#include "mozilla/CheckedInt.h"
 #include "mozilla/EndianUtils.h"
 #include "mozilla/FloatingPoint.h"
 #include "mozilla/MathAlgorithms.h"
@@ -46,11 +45,8 @@ using namespace js::jit;
 
 using JS::ToInt32;
 
-using mozilla::CheckedInt;
-using mozilla::DebugOnly;
 using mozilla::IsFloat32Representable;
 using mozilla::IsPowerOfTwo;
-using mozilla::Maybe;
 using mozilla::NumbersAreIdentical;
 
 NON_GC_POINTER_TYPE_ASSERTIONS_GENERATED
@@ -311,6 +307,40 @@ static MConstant* EvaluateConstantOperands(TempAllocator& alloc,
   }
 
   return MConstant::New(alloc, retVal);
+}
+
+static MConstant* EvaluateConstantNaNOperand(MBinaryInstruction* ins) {
+  auto* left = ins->lhs();
+  auto* right = ins->rhs();
+
+  MOZ_ASSERT(IsTypeRepresentableAsDouble(left->type()));
+  MOZ_ASSERT(IsTypeRepresentableAsDouble(right->type()));
+  MOZ_ASSERT(left->type() == ins->type());
+  MOZ_ASSERT(right->type() == ins->type());
+
+  // Don't fold NaN if we can't return a floating point type.
+  if (!IsFloatingPointType(ins->type())) {
+    return nullptr;
+  }
+
+  MOZ_ASSERT(!left->isConstant() || !right->isConstant(),
+             "EvaluateConstantOperands should have handled this case");
+
+  // One operand must be a constant NaN.
+  MConstant* cst;
+  if (left->isConstant()) {
+    cst = left->toConstant();
+  } else if (right->isConstant()) {
+    cst = right->toConstant();
+  } else {
+    return nullptr;
+  }
+  if (!std::isnan(cst->numberToDouble())) {
+    return nullptr;
+  }
+
+  // Fold to constant NaN.
+  return cst;
 }
 
 static MMul* EvaluateExactReciprocal(TempAllocator& alloc, MDiv* ins) {
@@ -2848,6 +2878,11 @@ MDefinition* MBinaryArithInstruction::foldsTo(TempAllocator& alloc) {
     return folded;
   }
 
+  if (MConstant* folded = EvaluateConstantNaNOperand(this)) {
+    MOZ_ASSERT(!isTruncated());
+    return folded;
+  }
+
   if (mustPreserveNaN_) {
     return this;
   }
@@ -3226,6 +3261,11 @@ MDefinition* MPow::foldsConstantPower(TempAllocator& alloc) {
     MMul* y = multiply(input(), input());
     block()->insertBefore(this, y);
     return multiply(y, y);
+  }
+
+  // Math.pow(x, NaN) == NaN.
+  if (std::isnan(pow)) {
+    return power();
   }
 
   // No optimization
@@ -3917,6 +3957,12 @@ MDefinition* MTruncateBigIntToInt64::foldsTo(TempAllocator& alloc) {
     return input->getOperand(0);
   }
 
+  // If the operand converts an I32 to BigInt, extend the I32 to I64.
+  if (input->isInt32ToBigInt()) {
+    return MExtendInt32ToInt64::New(alloc, input->getOperand(0),
+                                    /* isUnsigned = */ false);
+  }
+
   // Fold this operation if the input operand is constant.
   if (input->isConstant()) {
     return MConstant::NewInt64(
@@ -3936,6 +3982,13 @@ MDefinition* MToInt64::foldsTo(TempAllocator& alloc) {
   // Unwrap MInt64ToBigInt: MToInt64(MInt64ToBigInt(int64)) = int64.
   if (input->isInt64ToBigInt()) {
     return input->getOperand(0);
+  }
+
+  // Unwrap Int32ToBigInt:
+  // MToInt64(MInt32ToBigInt(int32)) = MExtendInt32ToInt64(int32).
+  if (input->isInt32ToBigInt()) {
+    return MExtendInt32ToInt64::New(alloc, input->getOperand(0),
+                                    /* isUnsigned = */ false);
   }
 
   // When the input is an Int64 already, just return it.

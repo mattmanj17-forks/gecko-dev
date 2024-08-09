@@ -246,6 +246,14 @@ features:
         type: List<OnboardingPanel>
         default: ["themes", "toolbar-placement", "sync", "tcp", "privacy-notice"]
 
+  one-click-search:
+    description: Enable/disable the one click search feature.
+    variables:
+      enabled:
+        description: If true, the one click search will be enabled.
+        type: Boolean
+        default: false
+
   glean:
     description: "A feature that provides server-side configurations for Glean metrics (aka Server Knobs)."
     allow-coenrollment: true
@@ -262,6 +270,14 @@ features:
         description: "Glean will delay io for ping lifetime metrics"
         type: Boolean
         default: true
+      ping-lifetime-threshold:
+        description: "Write count threshold when to auto-flush"
+        type: Int
+        default: 1000
+      ping-lifetime-max-time:
+        description: "After what time to auto-flush"
+        type: Int
+        default: 0
 
   splash-screen:
     description: "A feature that extends splash screen duration, allowing additional data fetching time for the app's initial run."
@@ -499,10 +515,10 @@ features:
     defaults:
       - channel: developer
         value:
-          enabled: true
+          enabled: false
       - channel: nightly
         value:
-          enabled: true
+          enabled: false
 
 types:
   objects: {}

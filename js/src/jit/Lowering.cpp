@@ -3011,16 +3011,18 @@ void LIRGenerator::visitToFloat16(MToFloat16* convert) {
     }
 
     case MIRType::Double: {
-      LDefinition tempDef = LDefinition::BogusTemp();
-      if (!MacroAssembler::SupportsFloat64To16()) {
-        tempDef = temp();
-      }
-
-      auto* lir =
-          new (alloc()) LDoubleToFloat16(useRegisterAtStart(opd), tempDef);
-      define(lir, convert);
-
-      if (!MacroAssembler::SupportsFloat64To16()) {
+      if (MacroAssembler::SupportsFloat64To16()) {
+        auto* lir = new (alloc())
+            LDoubleToFloat16(useRegisterAtStart(opd), LDefinition::BogusTemp());
+        define(lir, convert);
+      } else if (MacroAssembler::SupportsFloat32To16()) {
+        auto* lir = new (alloc())
+            LDoubleToFloat32ToFloat16(useRegister(opd), temp(), temp());
+        define(lir, convert);
+      } else {
+        auto* lir =
+            new (alloc()) LDoubleToFloat16(useRegisterAtStart(opd), temp());
+        define(lir, convert);
         assignSafepoint(lir, convert);
       }
       break;
@@ -3338,6 +3340,13 @@ void LIRGenerator::visitTruncateBigIntToInt64(MTruncateBigIntToInt64* ins) {
   MOZ_ASSERT(ins->input()->type() == MIRType::BigInt);
   auto* lir = new (alloc()) LTruncateBigIntToInt64(useRegister(ins->input()));
   defineInt64(lir, ins);
+}
+
+void LIRGenerator::visitInt32ToBigInt(MInt32ToBigInt* ins) {
+  MOZ_ASSERT(ins->input()->type() == MIRType::Int32);
+  auto* lir = new (alloc()) LInt32ToBigInt(useRegister(ins->input()), temp());
+  define(lir, ins);
+  assignSafepoint(lir, ins);
 }
 
 void LIRGenerator::visitInt64ToBigInt(MInt64ToBigInt* ins) {

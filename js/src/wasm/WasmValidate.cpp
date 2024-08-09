@@ -36,8 +36,10 @@ using namespace js::wasm;
 
 using mozilla::AsChars;
 using mozilla::CheckedInt;
-using mozilla::CheckedInt32;
 using mozilla::IsUtf8;
+using mozilla::Maybe;
+using mozilla::Nothing;
+using mozilla::Some;
 using mozilla::Span;
 
 // Misc helpers.
@@ -1620,7 +1622,7 @@ static bool DecodeStructType(Decoder& d, CodeMetadata* codeMeta,
     return d.fail("too many fields in struct");
   }
 
-  StructFieldVector fields;
+  FieldTypeVector fields;
   if (!fields.resize(numFields)) {
     return false;
   }

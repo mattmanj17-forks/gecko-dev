@@ -615,10 +615,9 @@ abstract class BaseBrowserFragment :
                 sessionId = customTabSessionId,
                 view = binding.findInPageView,
                 engineView = binding.engineView,
-                toolbarInfo = FindInPageIntegration.ToolbarInfo(
-                    toolbar = browserToolbarView.layout,
-                    isToolbarDynamic = isToolbarDynamic(context),
-                    isToolbarPlacedAtTop = context.settings().toolbarPosition == ToolbarPosition.TOP,
+                toolbars = listOf(
+                    _bottomToolbarContainerView?.toolbarContainerView,
+                    browserToolbarView.layout as? ViewGroup?,
                 ),
             ),
             owner = this,
@@ -834,7 +833,15 @@ abstract class BaseBrowserFragment :
         val bottomToolbarHeight = context.settings().getBottomToolbarHeight(context)
 
         downloadFeature.onDownloadStopped = { downloadState, _, downloadJobStatus ->
-            handleOnDownloadFinished(downloadState, downloadJobStatus, downloadFeature::tryAgain)
+            handleOnDownloadFinished(
+                downloadState = downloadState,
+                downloadJobStatus = downloadJobStatus,
+                tryAgain = downloadFeature::tryAgain,
+                browserToolbars = listOfNotNull(
+                    browserToolbarView,
+                    _bottomToolbarContainerView?.toolbarContainerView,
+                ),
+            )
         }
 
         resumeDownloadDialogState(
@@ -1043,10 +1050,10 @@ abstract class BaseBrowserFragment :
 
         crashContentIntegration.set(
             feature = CrashContentIntegration(
+                context = context,
                 browserStore = requireComponents.core.store,
                 appStore = requireComponents.appStore,
                 toolbar = browserToolbarView.view,
-                isToolbarPlacedAtTop = context.settings().toolbarPosition == ToolbarPosition.TOP,
                 crashReporterView = binding.crashReporterView,
                 components = requireComponents,
                 settings = context.settings(),
@@ -1495,7 +1502,9 @@ abstract class BaseBrowserFragment :
                     Column {
                         Divider()
 
-                        if (!activity.isMicrosurveyPromptDismissed.value) {
+                        if (!activity.isMicrosurveyPromptDismissed.value &&
+                            !(context.isTablet() && context.settings().shouldShowTabletNavigationCFR)
+                        ) {
                             currentMicrosurvey?.let {
                                 if (isToolbarAtBottom) {
                                     updateBrowserToolbarForMicrosurveyPrompt(browserToolbar)
@@ -1607,6 +1616,23 @@ abstract class BaseBrowserFragment :
                 }
             },
         ) {
+            val tabCounterMenu = lazy {
+                FenixTabCounterMenu(
+                    context = context,
+                    onItemTapped = { item ->
+                        browserToolbarInteractor.onTabCounterMenuItemTapped(item)
+                    },
+                    iconColor = when (activity.browsingModeManager.mode.isPrivate) {
+                        true -> getColor(context, R.color.fx_mobile_private_icon_color_primary)
+                        else -> null
+                    },
+                ).also {
+                    it.updateMenu(
+                        toolbarPosition = context.settings().toolbarPosition,
+                    )
+                }
+            }
+
             BrowserNavBar(
                 isPrivateMode = activity.browsingModeManager.mode.isPrivate,
                 browserStore = context.components.core.store,
@@ -1621,20 +1647,7 @@ abstract class BaseBrowserFragment :
                         else -> null
                     },
                 ),
-                tabsCounterMenu = FenixTabCounterMenu(
-                    context = context,
-                    onItemTapped = { item ->
-                        browserToolbarInteractor.onTabCounterMenuItemTapped(item)
-                    },
-                    iconColor = when (activity.browsingModeManager.mode.isPrivate) {
-                        true -> getColor(context, R.color.fx_mobile_private_icon_color_primary)
-                        else -> null
-                    },
-                ).also {
-                    it.updateMenu(
-                        toolbarPosition = context.settings().toolbarPosition,
-                    )
-                },
+                tabsCounterMenu = tabCounterMenu,
                 onBackButtonClick = {
                     if (context.settings().shouldShowNavigationButtonsCFR) {
                         val currentTime = System.currentTimeMillis()
