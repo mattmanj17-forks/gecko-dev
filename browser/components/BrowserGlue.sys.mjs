@@ -1363,10 +1363,6 @@ BrowserGlue.prototype = {
           // likely sees the profile selector on launch.
           if (Services.prefs.getBoolPref(launchOnLoginPref)) {
             Glean.launchOnLogin.lastProfileDisableStartup.record();
-            Services.telemetry.setEventRecordingEnabled(
-              "launch_on_login",
-              true
-            );
             Services.telemetry.recordEvent(
               "launch_on_login",
               "last_profile_disable",
@@ -2147,56 +2143,40 @@ BrowserGlue.prototype = {
         break;
     }
 
-    Services.telemetry.scalarSet(
-      "contentblocking.fingerprinting_blocking_enabled",
-      fpEnabled
-    );
-    Services.telemetry.scalarSet(
-      "contentblocking.cryptomining_blocking_enabled",
-      cmEnabled
-    );
-    Services.telemetry.scalarSet("contentblocking.category", categoryPref);
+    Glean.contentblocking.fingerprintingBlockingEnabled.set(fpEnabled);
+    Glean.contentblocking.cryptominingBlockingEnabled.set(cmEnabled);
+    Glean.contentblocking.category.set(categoryPref);
   },
 
   _recordDataSanitizationPrefs() {
-    Services.telemetry.scalarSet(
-      "datasanitization.privacy_sanitize_sanitizeOnShutdown",
+    Glean.datasanitization.privacySanitizeSanitizeOnShutdown.set(
       Services.prefs.getBoolPref("privacy.sanitize.sanitizeOnShutdown")
     );
-    Services.telemetry.scalarSet(
-      "datasanitization.privacy_clearOnShutdown_cookies",
+    Glean.datasanitization.privacyClearOnShutdownCookies.set(
       Services.prefs.getBoolPref("privacy.clearOnShutdown.cookies")
     );
-    Services.telemetry.scalarSet(
-      "datasanitization.privacy_clearOnShutdown_history",
+    Glean.datasanitization.privacyClearOnShutdownHistory.set(
       Services.prefs.getBoolPref("privacy.clearOnShutdown.history")
     );
-    Services.telemetry.scalarSet(
-      "datasanitization.privacy_clearOnShutdown_formdata",
+    Glean.datasanitization.privacyClearOnShutdownFormdata.set(
       Services.prefs.getBoolPref("privacy.clearOnShutdown.formdata")
     );
-    Services.telemetry.scalarSet(
-      "datasanitization.privacy_clearOnShutdown_downloads",
+    Glean.datasanitization.privacyClearOnShutdownDownloads.set(
       Services.prefs.getBoolPref("privacy.clearOnShutdown.downloads")
     );
-    Services.telemetry.scalarSet(
-      "datasanitization.privacy_clearOnShutdown_cache",
+    Glean.datasanitization.privacyClearOnShutdownCache.set(
       Services.prefs.getBoolPref("privacy.clearOnShutdown.cache")
     );
-    Services.telemetry.scalarSet(
-      "datasanitization.privacy_clearOnShutdown_sessions",
+    Glean.datasanitization.privacyClearOnShutdownSessions.set(
       Services.prefs.getBoolPref("privacy.clearOnShutdown.sessions")
     );
-    Services.telemetry.scalarSet(
-      "datasanitization.privacy_clearOnShutdown_offlineApps",
+    Glean.datasanitization.privacyClearOnShutdownOfflineApps.set(
       Services.prefs.getBoolPref("privacy.clearOnShutdown.offlineApps")
     );
-    Services.telemetry.scalarSet(
-      "datasanitization.privacy_clearOnShutdown_siteSettings",
+    Glean.datasanitization.privacyClearOnShutdownSiteSettings.set(
       Services.prefs.getBoolPref("privacy.clearOnShutdown.siteSettings")
     );
-    Services.telemetry.scalarSet(
-      "datasanitization.privacy_clearOnShutdown_openWindows",
+    Glean.datasanitization.privacyClearOnShutdownOpenWindows.set(
       Services.prefs.getBoolPref("privacy.clearOnShutdown.openWindows")
     );
 
@@ -2213,10 +2193,7 @@ BrowserGlue.prototype = {
         exceptions++;
       }
     }
-    Services.telemetry.scalarSet(
-      "datasanitization.session_permission_exceptions",
-      exceptions
-    );
+    Glean.datasanitization.sessionPermissionExceptions.set(exceptions);
   },
 
   /**
@@ -5986,7 +5963,8 @@ export var AboutHomeStartupCache = {
 
   // The following values are as possible values for the
   // browser.startup.abouthome_cache_result scalar. Keep these in sync with the
-  // scalar definition in Scalars.yaml. See setDeferredResult for more
+  // scalar definition in Scalars.yaml and the matching Glean metric in
+  // browser/components/metrics.yaml. See setDeferredResult for more
   // information.
   CACHE_RESULT_SCALARS: {
     UNSET: 0,
@@ -6199,8 +6177,7 @@ export var AboutHomeStartupCache = {
       this._cacheTask.arm();
     }
 
-    Services.telemetry.scalarSet(
-      "browser.startup.abouthome_cache_shutdownwrite",
+    Glean.browserStartup.abouthomeCacheShutdownwrite.set(
       this._cacheTask.isArmed
     );
 
@@ -6702,10 +6679,7 @@ export var AboutHomeStartupCache = {
   recordResult(result) {
     // Note: this can be called very early on in the lifetime of
     // AboutHomeStartupCache, so things like this.log might not exist yet.
-    Services.telemetry.scalarSet(
-      "browser.startup.abouthome_cache_result",
-      result
-    );
+    Glean.browserStartup.abouthomeCacheResult.set(result);
   },
 
   /**

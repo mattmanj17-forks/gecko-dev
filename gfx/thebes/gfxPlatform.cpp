@@ -1073,10 +1073,10 @@ void gfxPlatform::ReportTelemetry() {
     for (const auto& screen : screenManager.CurrentScreenList()) {
       supportsHDR |= screen->GetIsHDR();
     }
-    Telemetry::ScalarSet(Telemetry::ScalarID::GFX_SUPPORTS_HDR, supportsHDR);
+    glean::gfx::supports_hdr.Set(supportsHDR);
 
     bool tmpWritable = IsOsTempDirWritable();
-    Telemetry::ScalarSet(Telemetry::ScalarID::GFX_TMP_WRITABLE, tmpWritable);
+    glean::gfx::tmp_writable.Set(tmpWritable);
   }
 
   nsString adapterDesc;
@@ -2509,7 +2509,7 @@ void gfxPlatform::InitAcceleration() {
                       "FEATURE_REMOTE_CANVAS_NO_GPU_PROCESS"_ns);
     }
 
-#if defined(XP_WIN) && defined(NIGHTLY_BUILD)
+#ifdef XP_WIN
     // If D2D is explicitly disabled on Windows, then don't use remote canvas.
     // This prevents it from interfering with Accelerated Canvas2D.
     if (StaticPrefs::gfx_direct2d_disabled_AtStartup() &&
@@ -2518,9 +2518,7 @@ void gfxPlatform::InitAcceleration() {
                               "Disabled without Direct2D",
                               "FEATURE_REMOTE_CANVAS_NO_DIRECT2D"_ns);
     }
-#endif
-
-#ifndef XP_WIN
+#else
     gfxConfig::ForceDisable(Feature::REMOTE_CANVAS, FeatureStatus::Blocked,
                             "Platform not supported",
                             "FEATURE_REMOTE_CANVAS_NOT_WINDOWS"_ns);
@@ -2973,8 +2971,7 @@ void gfxPlatform::InitWebRenderConfig() {
     gfxVars::SetUseWebRenderCompositor(true);
   }
 
-  Telemetry::ScalarSet(
-      Telemetry::ScalarID::GFX_OS_COMPOSITOR,
+  glean::gfx::os_compositor.Set(
       gfx::gfxConfig::IsEnabled(gfx::Feature::WEBRENDER_COMPOSITOR));
 
   if (gfxConfig::IsEnabled(Feature::WEBRENDER_PARTIAL)) {

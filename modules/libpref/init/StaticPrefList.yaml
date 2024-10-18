@@ -5893,6 +5893,8 @@
   value: true
 #elif defined(MOZ_WIDGET_ANDROID)
   value: true
+#elif defined(XP_WIN)
+  value: true
 #else
   value: false
 #endif
@@ -6257,7 +6259,7 @@
 # Whether to disable the automatic detection and use of direct2d.
 - name: gfx.direct2d.disabled
   type: bool
-  value: false
+  value: true
   mirror: once
 
 # Whether to attempt to enable Direct2D regardless of automatic detection or
@@ -8158,6 +8160,14 @@
     value: false
     mirror: always
     set_spidermonkey_pref: startup
+
+  # Experimental support for Iterator Sequencing in JavaScript.
+-   name: javascript.options.experimental.iterator_sequencing
+    type: bool
+    value: false
+    mirror: always
+    set_spidermonkey_pref: startup
+
 
 #endif  // NIGHTLY_BUILD
 
@@ -10855,7 +10865,7 @@
 -   name: media.ffmpeg.encoder.enabled
     type: RelaxedAtomicBool
 #if !defined(MOZ_WIDGET_ANDROID)
-    value: @IS_NIGHTLY_BUILD@
+    value: true
 #else
     value: false
 #endif
@@ -11839,6 +11849,11 @@
   mirror: always
 
 - name: media.webrtc.tls_tunnel_for_all_proxy
+  type: bool
+  value: true
+  mirror: always
+
+- name: media.webrtc.disallow_HTTPS_upgrade_for_TURN
   type: bool
   value: true
   mirror: always
