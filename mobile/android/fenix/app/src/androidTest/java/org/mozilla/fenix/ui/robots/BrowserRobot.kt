@@ -166,10 +166,14 @@ class BrowserRobot {
     }
 
     fun verifyETPLearnMoreURL() {
+        // Get and log the URL in case there are failures in the future
+        Log.i(TAG, "verifyETPLearnMoreURL: ETP learn more URL = ${itemWithResId("$packageName:id/mozac_browser_toolbar_url_view").text}")
         try {
+            verifyUrl("support.mozilla.org/en-US/kb/tracking-protection-firefox-android")
+        } catch (e: AssertionError) {
+            Log.i(TAG, "verifyETPLearnMoreURL: AssertionError caught, checking redirect URL")
             verifyUrl("support.mozilla.org/en-US/kb/enhanced-tracking-protection-firefox-android")
         } catch (e: AssertionError) {
-            Log.i(TAG, "verifyETPURL: AssertionError caught, checking redirect URL")
             verifyUrl(
                 SupportUtils.getSumoURLForTopic(appContext, SupportUtils.SumoTopic.TOTAL_COOKIE_PROTECTION).replace("https://", ""),
             )
@@ -1248,6 +1252,17 @@ class BrowserRobot {
 
     fun verifyExtensionsMenuDoesNotExist() {
         assertUIObjectIsGone(itemWithDescription(getStringResource(R.string.browser_extensions_menu_handlebar_content_description)))
+    }
+
+    fun verifyExtensionsPromotionBannerLearnMoreLinkURL() {
+        try {
+            verifyUrl("support.mozilla.org/en-US/kb/find-and-install-add-ons-firefox-android")
+        } catch (e: AssertionError) {
+            Log.i(TAG, "verifyExtensionsPromotionBannerLearnMoreLinkURL: AssertionError caught, checking redirect URL")
+            verifyUrl(
+                SupportUtils.getSumoURLForTopic(appContext, SupportUtils.SumoTopic.FIND_INSTALL_ADDONS).replace("https://", ""),
+            )
+        }
     }
 
     class Transition {
