@@ -2975,6 +2975,13 @@ struct nsGridContainerFrame::Tracks {
                            WritingMode aWM, nscoord aContentBoxSize,
                            bool aIsSubgridded);
 
+  /**
+   * Return the sum of the resolved track and gap sizes (without any packing
+   * space introduced by align-content or justify-content.
+   */
+  nscoord TotalTrackSizeWithoutAlignment(
+      const nsGridContainerFrame* aGridContainerFrame) const;
+
   nscoord GridLineEdge(uint32_t aLine, GridLineSide aSide) const {
     if (MOZ_UNLIKELY(mSizes.IsEmpty())) {
       // https://drafts.csswg.org/css-grid-2/#grid-definition
@@ -3294,6 +3301,15 @@ struct MOZ_STACK_CLASS nsGridContainerFrame::GridReflowInput {
   void CalculateTrackSizesForAxis(LogicalAxis aAxis, const Grid& aGrid,
                                   nscoord aCBSize,
                                   SizingConstraint aConstraint);
+
+  /**
+   * Invalidate track sizes for the given axis by clearing track sizing bits for
+   * all grid items and mark the track sizes and positions as needing recompute.
+   *
+   * This helper must be called before invoking CalculateTrackSizesForAxis()
+   * again in aAxis; otherwise, assertions will fire.
+   */
+  void InvalidateTrackSizesForAxis(LogicalAxis aAxis);
 
   /**
    * Return the percentage basis for a grid item in its writing-mode.
@@ -4191,8 +4207,7 @@ void nsGridContainerFrame::UsedTrackSizes::ResolveSubgridTrackSizesForAxis(
   grid.mGridRowEnd = aSubgrid->mGridRowEnd;
   gridRI.CalculateTrackSizesForAxis(aAxis, grid, aContentBoxSize,
                                     SizingConstraint::NoConstraint);
-  const auto& tracks =
-      aAxis == LogicalAxis::Inline ? gridRI.mCols : gridRI.mRows;
+  const auto& tracks = gridRI.TracksFor(aAxis);
   mSizes[aAxis].Assign(tracks.mSizes);
   mCanResolveLineRangeSize[aAxis] = tracks.mCanResolveLineRangeSize;
   MOZ_ASSERT(mCanResolveLineRangeSize[aAxis]);
@@ -4201,7 +4216,7 @@ void nsGridContainerFrame::UsedTrackSizes::ResolveSubgridTrackSizesForAxis(
 void nsGridContainerFrame::GridReflowInput::CalculateTrackSizesForAxis(
     LogicalAxis aAxis, const Grid& aGrid, nscoord aContentBoxSize,
     SizingConstraint aConstraint) {
-  auto& tracks = aAxis == LogicalAxis::Inline ? mCols : mRows;
+  auto& tracks = TracksFor(aAxis);
   const auto& sizingFunctions =
       aAxis == LogicalAxis::Inline ? mColFunctions : mRowFunctions;
   const auto& gapStyle = aAxis == LogicalAxis::Inline ? mGridStyle->mColumnGap
@@ -4307,6 +4322,14 @@ void nsGridContainerFrame::GridReflowInput::CalculateTrackSizesForAxis(
 
   // positions and sizes are now final
   tracks.mCanResolveLineRangeSize = true;
+}
+
+void nsGridContainerFrame::GridReflowInput::InvalidateTrackSizesForAxis(
+    LogicalAxis aAxis) {
+  for (auto& item : mGridItems) {
+    item.ResetTrackSizingBits(aAxis);
+  }
+  TracksFor(aAxis).mCanResolveLineRangeSize = false;
 }
 
 // Align an item's margin box in its aAxis inside aCBSize.
@@ -5850,8 +5873,7 @@ static nscoord ContentContribution(const GridItemInfo& aGridItem,
         if (subgridExtent > 1) {
           nscoord subgridGap =
               nsLayoutUtils::ResolveGapToLength(gapStyle, NS_UNCONSTRAINEDSIZE);
-          auto& tracks =
-              aAxis == LogicalAxis::Block ? aGridRI.mRows : aGridRI.mCols;
+          const auto& tracks = aGridRI.TracksFor(aAxis);
           auto gapDelta = subgridGap - tracks.mGridGap;
           if (!itemEdgeBits) {
             extraMargin += gapDelta;
@@ -7554,6 +7576,21 @@ void nsGridContainerFrame::Tracks::AlignJustifyContent(
   MOZ_ASSERT(!roundingError, "we didn't distribute all rounding error?");
 }
 
+nscoord nsGridContainerFrame::Tracks::TotalTrackSizeWithoutAlignment(
+    const nsGridContainerFrame* aGridContainerFrame) const {
+  if (aGridContainerFrame->IsSubgrid(mAxis)) {
+    // TODO: Investigate whether GridLineEdge here may include extra packing
+    // space introduced by align-content or justify-content, and if that could
+    // lead to inconsistent metrics vs. the non-subgrid path.
+    return GridLineEdge(mSizes.Length(), GridLineSide::BeforeGridGap);
+  }
+
+  // This method allows for the possibility that AlignJustifyContent() might not
+  // be called yet. Therefore, we can't use GridLineEdge() here, as mPosition
+  // may not be calculated.
+  return SumOfGridTracksAndGaps();
+}
+
 void nsGridContainerFrame::LineRange::ToPositionAndLength(
     const nsTArray<TrackSize>& aTrackSizes, nscoord* aPos,
     nscoord* aLength) const {
@@ -9186,23 +9223,11 @@ nscoord nsGridContainerFrame::ComputeBSizeForResolvingRowSizes(
                                      NS_UNCONSTRAINEDSIZE,
                                      SizingConstraint::NoConstraint);
 
-  nscoord result;
-  if (!IsRowSubgrid()) {
-    // Note: we can't use GridLineEdge here since we haven't calculated the
-    // rows' mPosition yet (happens in a later AlignJustifyContent call in
-    // Reflow()).
-    result = aGridRI.mRows.SumOfGridTracksAndGaps();
-  } else {
-    result = aGridRI.mRows.GridLineEdge(aGridRI.mRows.mSizes.Length(),
-                                        GridLineSide::BeforeGridGap);
-  }
-  result = aGridRI.mReflowInput->ApplyMinMaxBSize(result);
+  const nscoord result = aGridRI.mReflowInput->ApplyMinMaxBSize(
+      aGridRI.mRows.TotalTrackSizeWithoutAlignment(this));
 
-  // Reset the track sizing bits before re-resolving the row sizes in Reflow().
-  for (auto& item : aGridRI.mGridItems) {
-    item.ResetTrackSizingBits(LogicalAxis::Block);
-  }
-  aGridRI.mRows.mCanResolveLineRangeSize = false;
+  // Invalidate the row sizes before re-resolving them in Reflow().
+  aGridRI.InvalidateTrackSizesForAxis(LogicalAxis::Block);
 
   return result;
 }
@@ -9236,16 +9261,7 @@ nscoord nsGridContainerFrame::ComputeIntrinsicContentBSize(
     return aBSizeForResolvingRowSizes;
   }
 
-  // Use the resolved sizes of our rows.
-  if (!IsRowSubgrid()) {
-    // Note: we can't use GridLineEdge here since we haven't calculated
-    // the rows' mPosition yet (happens in a later AlignJustifyContent call in
-    // Reflow()).
-    return aGridRI.mRows.SumOfGridTracksAndGaps();
-  }
-
-  const uint32_t numRows = aGridRI.mRows.mSizes.Length();
-  return aGridRI.mRows.GridLineEdge(numRows, GridLineSide::BeforeGridGap);
+  return aGridRI.mRows.TotalTrackSizeWithoutAlignment(this);
 }
 
 void nsGridContainerFrame::Reflow(nsPresContext* aPresContext,
@@ -10056,11 +10072,8 @@ nscoord nsGridContainerFrame::ComputeIntrinsicISize(
     gridRI.CalculateTrackSizesForAxis(LogicalAxis::Block, grid, contentBoxBSize,
                                       SizingConstraint::NoConstraint);
 
-    // Reset the track sizing bits before re-resolving the column sizes.
-    for (auto& item : gridRI.mGridItems) {
-      item.ResetTrackSizingBits(LogicalAxis::Inline);
-    }
-    gridRI.mCols.mCanResolveLineRangeSize = false;
+    // Invalidate the column sizes before re-resolving them.
+    gridRI.InvalidateTrackSizesForAxis(LogicalAxis::Inline);
 
     // Re-resolve the column sizes, using the resolved row sizes establish
     // above. See 12.1.3 of the Grid Sizing Algorithm for more scenarios where
@@ -10070,11 +10083,7 @@ nscoord nsGridContainerFrame::ComputeIntrinsicISize(
                                       NS_UNCONSTRAINEDSIZE, constraint);
   }
 
-  if (MOZ_LIKELY(!IsSubgrid())) {
-    return gridRI.mCols.SumOfGridTracksAndGaps();
-  }
-  const auto& last = gridRI.mCols.mSizes.LastElement();
-  return last.mPosition + last.mBase;
+  return gridRI.mCols.TotalTrackSizeWithoutAlignment(this);
 }
 
 nscoord nsGridContainerFrame::IntrinsicISize(const IntrinsicSizeInput& aInput,
